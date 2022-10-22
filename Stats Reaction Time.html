@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Reaction Time</title>
+	
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&display=swap" rel="stylesheet">
+
+	<style>
+		body {
+			margin: 0px;
+			overflow: hidden;
+			background-color: #DFDFDF;
+
+			width: 100vw;
+			height: 100vh;
+
+			user-select: none;
+			-webkit-user-select: none;
+		}
+
+		body.react {
+			background-color: #FFA841;
+		}
+
+		input {
+			outline: none;
+			background-color: #EBEBEB;
+			border: 1px solid #D0D0D0;
+
+			padding: 5px;
+			padding-left:  7px;
+			padding-right: 7px;
+			margin-bottom: 3px;
+
+			font-family: "Outfit", sans-serif;
+			font-weight: normal;
+			font-size: 14px;
+			color: #8a8a8a;
+
+			border-radius: 3px;
+		}
+		input::placeholder {
+			color: #949494;
+		}
+		button {
+			outline: none;
+			background-color: #E8E8E8;
+			border: 1px solid #D0D0D0;
+
+			padding: 3px;
+			padding-left:  7px;
+			padding-right: 7px;
+			margin-bottom: 3px;
+
+			font-family: "Outfit", sans-serif;
+			font-weight: normal;
+			font-size: 14px;
+			color: #888;
+
+			border-radius: 3px;
+
+			cursor: pointer;
+		}
+		label {
+			padding: 3px;
+			padding-left:  7px;
+			padding-right: 7px;
+			margin-bottom: 3px;
+
+			font-family: "Outfit", sans-serif;
+			font-weight: normal;
+			font-size: 14px;
+			color: #888;
+		}
+		#copyText {
+			display: none;
+		}
+		#copyText.active {
+			display: inline-block;
+		}
+
+		p {
+			display: none;
+
+			font-family: "Outfit", sans-serif;
+			font-weight: normal;
+			font-size: 16px;
+			color: #888;
+		}
+		p.active {
+			display: block;
+		}
+
+		#startTest {
+			position: absolute;
+			top:  50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+
+			pointer-events: none;
+			font-weight: bold;
+			font-size: 25px;
+		}
+
+		#userData {
+			position: absolute;
+			top: 10px;
+			right: 40px;
+			
+			pointer-events: none;
+			white-space: pre;
+			text-align: right;
+		}
+	</style>
+</head>
+<body>
+	<div style="margin-top: 10px; margin-left: 10px; display: inline-block;">
+		<input type="text" placeholder="Name" autocomplete="off" id="name"><br>
+		<input type="number" step="0.5" min="0" placeholder="Hours of sleep" id="sleep"><br>
+		<input type="text" placeholder="Lunch period" id="lunch" style="width: 85px;"><br>
+		<button id="copyResults">Copy results</button>
+		<label for="copyResults" id="copyText">Copied!</label>
+	</div>
+
+	<p id="startTest" class="active">Click anywhere to start</p>
+	<p id="userData" class=""></p>
+</body>
+
+<script>
+	let data = JSON.parse(localStorage.getItem("reactionTimeData") || "null");
+	if (data === null) {
+		data = {}
+	}
+	else {
+		Object.values(data).forEach(entry => {
+			entry.times = Object.values(entry.times);
+		});
+	}
+
+	function save() {
+		localStorage.setItem("reactionTimeData", JSON.stringify(data));
+	}
+	
+	async function copy(val) {
+		await navigator.clipboard.writeText(val);
+		
+		let elem = document.getElementById("copyText");
+		elem.classList.add("active");
+
+		if (typeof elem.timeout === "number") clearTimeout(elem.timeout);
+
+		let timeout = setTimeout(() => {
+			elem.classList.remove("active");
+			delete elem.timeout;
+		}, 1000);
+		elem.timeout = timeout;
+	}
+	document.getElementById("copyResults").addEventListener("click", () => {
+		copy(JSON.stringify(Object.values(data), null, " "));
+	});
+
+	let state = "wait";
+	let testEnd = 0;
+	function click(event) {
+		let startTest = document.getElementById("startTest");
+		let userData = document.getElementById("userData");
+		let curTime = performance.now();
+		let date = new Date();
+		if (event.target === document.body) {
+			if (state === "wait") {
+				state = "react";
+
+				startTest.classList.remove("active");
+				testEnd = curTime + Math.random() * 3000 + 2000;
+
+				document.body.timeout = setTimeout(() => {
+					document.body.classList.add("react");
+				}, testEnd - curTime);
+			}
+			else if (state === "react") {
+				let delta = curTime - testEnd;
+
+				if (delta > 0) { // add data to save
+					let name = document.getElementById("name").value.toLowerCase();
+					let sleep = document.getElementById("sleep").value;
+					let lunch = document.getElementById("lunch").value.toLowerCase();
+					if (!data[name]) { // add entry if person doesn't exist
+						data[name] = {
+							name: name,
+							sleep: sleep,
+							lunch: lunch,
+							tod: date.getHours() + date.getMinutes() / 60,
+							todReadable: date.getHours() + "h" + date.getMinutes(),
+							times: [],
+							time: 0,
+						}
+					}
+					data[name].times.push(Math.round(delta));
+					data[name].time = data[name].times.reduce((a, b) => a + b, 0) / data[name].times.length;
+					save();
+
+					userData.classList.add("active");
+					userData.innerText = data[name].times.join("\n");
+				}
+
+				clearTimeout(document.body.timeout);
+				document.body.classList.remove("react");
+				startTest.classList.add("active");
+				state = "wait";
+			}
+		}
+	}
+	document.body.onclick = click;
+
+	document.getElementById("name").addEventListener("input", event => {
+		let value = event.target.value.toLowerCase();
+		let userData = document.getElementById("userData");
+
+		if (data[value]) {
+			userData.classList.add("active");
+			userData.innerText = data[value].times.join("\n");
+		}
+		else {
+			userData.classList.remove("active");
+		}
+	});
+</script>
+</html>
